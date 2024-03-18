@@ -1,0 +1,28 @@
+version: '8'
+services:
+
+  #rag:
+
+    #build:
+    #  context: .
+    #  dockerfile: Dockerfile
+    #ports:
+    #    - "8000:8000"
+    #restart: always
+    #volumes:
+    #  - .:/app
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: rag
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
+
+volumes:
+    postgres_data: {}
