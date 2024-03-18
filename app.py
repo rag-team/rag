@@ -2,7 +2,7 @@ import streamlit as st
 from langchain.chains.conversational_retrieval.base import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
 from langchain_community.llms.llamacpp import LlamaCpp
-from langchain_text_splitters import CharacterTextSplitter
+from langchain_text_splitters import CharacterTextSplitter, RecursiveCharacterTextSplitter
 import pypdfium2 as pdfium  # Check leaderboard here: https://github.com/py-pdf/benchmarks  # yiwei-ang:feature/pdfium
 
 from db import VectorStore
@@ -18,12 +18,12 @@ def get_pdf_text(pdf_docs):
         for i in range(len(pdf_reader)):
             page = pdf_reader.get_page(i)
             textpage = page.get_textpage()
-            text += textpage.get_text_range() + "\n"
+            text += textpage.get_text_bounded() + "\n"
     return text
 
 
 def get_text_chunks(text):
-    text_splitter = CharacterTextSplitter(separator="\n", chunk_size=5000, chunk_overlap=500, length_function=len)
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=250, chunk_overlap=50)
     chunks = text_splitter.split_text(text)
     return chunks
 
@@ -31,19 +31,17 @@ def get_text_chunks(text):
 def get_conversation_chain(vectorestore):
     # Use open source LLama language model from huggingface
     model_path = "models/llama-2-7b-chat.Q5_K_M.gguf"
-
-
     llm = LlamaCpp(
         model_path=model_path,
-        temperature=0.75,
+        temperature=0.5,
         verbose=False,
-        max_length=512,
+        n_ctx=2048,
     )
 
     memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
     conversation_chain = ConversationalRetrievalChain.from_llm(
         llm=llm,
-        retriever=vectorestore.as_retriever(),
+        retriever=vectorestore.as_retriever(search_k=5),
         memory=memory,
         #return_source_documents=True,
     )
@@ -84,7 +82,6 @@ def main():
 
     # Initializing session state variables
     if "conversation_chain" not in ss:
-        print(ss)
         vectorstore = VectorStore().store
         ss.conversation_chain = get_conversation_chain(vectorstore)  # create conversation chain
 
