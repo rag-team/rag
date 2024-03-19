@@ -23,7 +23,7 @@ def get_pdf_text(pdf_docs):
 
 
 def get_text_chunks(text):
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=250, chunk_overlap=50)
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=400, chunk_overlap=50)
     chunks = text_splitter.split_text(text)
     return chunks
 
@@ -43,33 +43,20 @@ def get_conversation_chain(vectorestore):
         llm=llm,
         retriever=vectorestore.as_retriever(search_k=5),
         memory=memory,
-        #return_source_documents=True,
+        # return_source_documents=True,
     )
 
     return conversation_chain
 
 
-def save_question_and_clear_prompt(ss):
-    ss.user_question = ss.prompt_bar
-    ss.prompt_bar = ""  # clearing the prompt bar after clicking enter to prevent automatic re-submissions
-
-def write_chat(msgs):  # Write the Q&A in a pretty chat format
+def write_chat(msgs):
     for i, msg in enumerate(msgs):
-        if i % 2 == 0:  # it's a question
-            st.write(user_template.replace("{{MSG}}", msg.content), unsafe_allow_html=True)
-        else:  # it's an answer
-            st.write(bot_template.replace("{{MSG}}", msg.content), unsafe_allow_html=True)
-
-def handle_user_input(user_prompt):
-    response = st.session_state.conversation({"question": user_prompt})
-    print(response)
-    st.session_state.chat_history = response["chat_history"]
-
-    for i, message in enumerate(st.session_state.chat_history):
         if i % 2 == 0:
-            st.write(user_template.replace("{{MSG}}", message.content), unsafe_allow_html=True)
+            with st.chat_message("user"):
+                st.write(msg.content)
         else:
-            st.write(bot_template.replace("{{MSG}}", message.content), unsafe_allow_html=True)
+            with st.chat_message("ai"):
+                st.write(msg.content)
 
 
 def main():
@@ -77,16 +64,13 @@ def main():
 
     # Page design
     st.set_page_config(page_title="AI Document Search", page_icon=":robot_face:", layout="wide")
-    st.write(css, unsafe_allow_html=True)
     st.header("AI Document Search :robot_face:")
 
     # Initializing session state variables
     if "conversation_chain" not in ss:
         vectorstore = VectorStore().store
-        ss.conversation_chain = get_conversation_chain(vectorstore)  # create conversation chain
+        ss.conversation_chain = get_conversation_chain(vectorstore)
 
-    if "prompt_bar" not in ss:
-        ss.prompt_bar = ""
     if "user_question" not in ss:
         ss.user_question = ""
     if "docs_are_processed" not in ss:
@@ -101,13 +85,13 @@ def main():
                 raw_text = get_pdf_text(pdf_docs)  # get pdf text
                 text_chunks = get_text_chunks(raw_text)  # get the text chunks
                 vectorstore = VectorStore().store
-                vectorstore.add_texts(text_chunks, verbose=True)
+                ids = vectorstore.add_texts(text_chunks, verbose=True)
 
                 ss.docs_are_processed = True
         if ss.docs_are_processed:
-            st.success("Dokumente erfolgreich verarbeitet")
+            st.toast('Dokumene wurden erfolgreich hochgeladen.')
 
-    st.text_input("Ask a question here:", key='prompt_bar', on_change=save_question_and_clear_prompt(ss))
+    ss.user_question = st.chat_input("Ask a question here:")
 
     if ss.user_question:
         ss.conversation_chain({'question': ss.user_question})  # This is what gets the response from the LLM!
