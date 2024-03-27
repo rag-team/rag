@@ -30,7 +30,7 @@ def get_text_chunks(text):
 
 def get_conversation_chain(vectorestore):
     # Use open source LLama language model from huggingface
-    model_path = "models/llama-2-7b-chat.Q5_K_M.gguf"
+    model_path = "server/models/llama-2-7b-chat.Q5_K_M.gguf"
     llm = LlamaCpp(
         model_path=model_path,
         temperature=0.5,
