@@ -1,2 +1,4 @@
-Django
 llama_cpp_python
+pgvector
+streamlit
+pypdfium2
