@@ -4,7 +4,7 @@ from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores.pgvector import PGVector
 
 
-class VectorStore():
+class VectorStore:
     COLLECTION_NAME = "test_collection"
     CONNECTION_STRING = PGVector.connection_string_from_db_params(
         driver=os.environ.get("PGVECTOR_DRIVER", "psycopg2"),

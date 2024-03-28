@@ -4,7 +4,7 @@ from langchain.memory import ConversationBufferMemory
 from langchain_community.llms.llamacpp import LlamaCpp
 from langchain_text_splitters import CharacterTextSplitter, RecursiveCharacterTextSplitter
 
-from db import VectorStore
+from prototype.db import VectorStore
 
 
 # pdf docs are uploaded files
