@@ -1,9 +1,8 @@
 import asyncio
-import time
+import threading
 
 import requests
 import streamlit as st
-import threading
 
 
 def upload_files(files):
@@ -30,7 +29,6 @@ def upload_files(files):
         st.warning("Some files uploaded successfully, but there were errors for others")
         for error_message in error_messages:
             st.error(error_message)
-
 
 
 async def send_prompt(prompt: str):
@@ -91,7 +89,6 @@ def main():
         thread.start()
 
     update_chat()
-
 
 
 if __name__ == "__main__":
