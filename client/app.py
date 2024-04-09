@@ -1,13 +1,34 @@
 import asyncio
-import time
-import streamlit as st
 import threading
+
+import requests
+import streamlit as st
 
 
 def upload_files(files):
-    # wait for 3 seconds
-    time.sleep(3)
-    pass
+    # Send files to FastAPI server
+    url = "http://localhost:8000/upload-file/"
+    success_count = 0
+    error_messages = []
+
+    for file in files:
+        filename = file.name
+        mime_type = file.type
+        file_data = {"file": (filename, file.getvalue(), mime_type)}
+        response = requests.post(url, files=file_data)
+        if response.status_code == 200:
+            success_count += 1
+        else:
+            error_messages.append(f"Failed to upload '{filename}': {response.text}")
+
+    if success_count == len(files):
+        st.success("All files uploaded successfully")
+    elif success_count == 0:
+        st.error("Failed to upload all files")
+    else:
+        st.warning("Some files uploaded successfully, but there were errors for others")
+        for error_message in error_messages:
+            st.error(error_message)
 
 
 async def send_prompt(prompt: str):
@@ -59,9 +80,6 @@ def main():
             if st.button("Process") and pdf_docs:
                 with st.spinner("Verarbeite Dokumente..."):
                     upload_files(pdf_docs)
-                    ss.docs_are_processed = True
-            if ss.docs_are_processed:
-                st.toast('Dokumene wurden erfolgreich hochgeladen.')
 
     prompt = st.text_input("Ask a question here:")
 
@@ -71,7 +89,6 @@ def main():
         thread.start()
 
     update_chat()
-
 
 
 if __name__ == "__main__":
