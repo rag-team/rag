@@ -1,6 +1,3 @@
-import asyncio
-import threading
-
 import requests
 import streamlit as st
 
@@ -31,42 +28,41 @@ def upload_files(files):
             st.error(error_message)
 
 
-async def send_prompt(prompt: str):
+def send_prompt(prompt: str):
+    append_msg("user", prompt)
+
     # For demonstration, let's mock AI response
-    await asyncio.sleep(2)
-    response = "AI: This is the AI response to: " + prompt
-    st.session_state.conversation_chain.append({"role": "ai", "content": response})
+    import time
+
+    time.sleep(1)
+    response = f"AI: This is the AI response to: {prompt}"
+    append_msg("ai", response)
 
 
-def update_chat():
-    for i, msg in enumerate(st.session_state.conversation_chain):
-        if i % 2 == 0:
-            with st.chat_message("user"):
-                st.write(msg["content"])
-        else:
-            with st.chat_message("ai"):
-                st.write(msg["content"])
+def append_msg(role, content):
+    st.session_state.conversation_chain.append({"role": role, "content": content})
+    with st.chat_message(role):
+        st.write(content)
 
 
-def run_send_prompt(prompt):
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(send_prompt(prompt))
+def render_chat():
+    for msg in st.session_state.conversation_chain:
+        with st.chat_message(msg["role"]):
+            st.write(msg["content"])
 
 
 def main():
     ss = st.session_state
 
     # Page design
-    st.set_page_config(page_title="AI Document Search", page_icon=":robot_face:", layout="wide")
+    st.set_page_config(
+        page_title="AI Document Search", page_icon=":robot_face:", layout="wide"
+    )
     st.header("AI Document Search :robot_face:")
 
     # Initializing session state variables
     if "conversation_chain" not in ss:
         ss.conversation_chain = []
-
-    if "user_question" not in ss:
-        ss.user_question = ""
 
     if "docs_are_processed" not in ss:
         ss.docs_are_processed = False
@@ -75,20 +71,21 @@ def main():
     with st.sidebar:
         st.subheader("Datei-Upload")
         if not ss.docs_are_processed:
-            pdf_docs = st.file_uploader("Upload your PDFs here and click 'Process'", accept_multiple_files=True,
-                                        type="pdf")
+            pdf_docs = st.file_uploader(
+                "Upload your PDFs here and click 'Process'",
+                accept_multiple_files=True,
+                type="pdf",
+            )
             if st.button("Process") and pdf_docs:
                 with st.spinner("Verarbeite Dokumente..."):
                     upload_files(pdf_docs)
 
-    prompt = st.text_input("Ask a question here:")
+    # Render conversation chain
+    render_chat()
 
-    if prompt:
-        ss.conversation_chain.append({"role": "user", "content": prompt})
-        thread = threading.Thread(target=run_send_prompt, args=(prompt,))
-        thread.start()
-
-    update_chat()
+    # When question is asked, append message, send prompt to server and append response
+    if prompt := st.chat_input("Ask a question here:"):
+        send_prompt(prompt)
 
 
 if __name__ == "__main__":

@@ -2,3 +2,4 @@
 server/models/
 /llama-cpp-python/
 /data/
+*__pycache__/
