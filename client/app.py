@@ -1,4 +1,3 @@
-import asyncio
 import threading
 
 import requests
@@ -31,11 +30,13 @@ def upload_files(files):
             st.error(error_message)
 
 
-async def send_prompt(prompt: str):
-    # For demonstration, let's mock AI response
-    await asyncio.sleep(2)
-    response = "AI: This is the AI response to: " + prompt
-    st.session_state.conversation_chain.append({"role": "ai", "content": response})
+def chat_with_server(question):
+    url = "http://localhost:8000/chat/"
+    response = requests.get(url, params={"query": question})
+    if response.status_code == 200:
+        return response.text
+    else:
+        return f"Failed to get response: {response.status_code}"
 
 
 def update_chat():
@@ -48,10 +49,10 @@ def update_chat():
                 st.write(msg["content"])
 
 
-def run_send_prompt(prompt):
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(send_prompt(prompt))
+def run_chat(question):
+    response = chat_with_server(question)
+    st.session_state.conversation_chain.append({"role": "ai", "content": response})
+    update_chat()
 
 
 def main():
@@ -85,10 +86,8 @@ def main():
 
     if prompt:
         ss.conversation_chain.append({"role": "user", "content": prompt})
-        thread = threading.Thread(target=run_send_prompt, args=(prompt,))
-        thread.start()
-
-    update_chat()
+        update_chat()
+        run_chat(prompt)
 
 
 if __name__ == "__main__":
