@@ -4,24 +4,25 @@ import os
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, File, Response, UploadFile
-from langchain import ConversationalRetrievalChain
+from db import VectorStore
+from fastapi import FastAPI, File, HTTPException, Response, UploadFile
+from langchain.chains.conversational_retrieval.base import ConversationalRetrievalChain
 from langchain.memory.buffer import ConversationBufferMemory
 from langchain_community.llms.llamacpp import LlamaCpp
-from langchain_core.output_parsers import StrOutputParser
+from langchain_core.exceptions import OutputParserException
+from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from pypdf import PdfReader, PdfWriter
 
-from .db import VectorStore
+MODEL_PATH = "models/tinyllama-1.1b-chat-v0.3.Q4_K_M.gguf"
 
 
 @asynccontextmanager
-async def lifespan():
-    model_path = "./models/tinyllama-1.1b-chat-v0.3.Q2_K.gguf"
+async def lifespan(app: FastAPI):
     print("Loading LlamaCpp model...")
     start = time.time()
     app.state.llm = LlamaCpp(
-        model_path=model_path,
+        model_path=MODEL_PATH,
         temperature=0.5,
         verbose=False,
         n_ctx=2048,
@@ -72,22 +73,33 @@ async def fill_pdf(file: UploadFile = File(...), context: dict = {}):
     fields = reader.get_fields()
 
     prompt = ChatPromptTemplate.from_template(PROMPT)
-    output = StrOutputParser()
+    output = JsonOutputParser()
     chain = prompt | app.state.llm | output
 
     data = {
         "fields": {name: field.field_type for name, field in fields.items()},
         "context": json.dumps(context),
     }
-    result = chain.invoke(data)
+    try:
+        result = chain.invoke(data)
+    except OutputParserException as e:
+        raise HTTPException(
+            500,
+            {
+                "error": "Failed to fill PDF because LLM too dumb.",
+                "llm": os.path.basename(MODEL_PATH),
+                "result": e.llm_output,
+            },
+        )
 
-    result_json = json.loads(result)
+    print(result)
+
     writer = PdfWriter()
     writer.append(reader)
     writer.set_need_appearances_writer()
 
     for page in writer.pages:
-        writer.update_page_form_field_values(page, result_json, auto_regenerate=False)
+        writer.update_page_form_field_values(page, result, auto_regenerate=False)
 
     bio = io.BytesIO()
     writer.write(bio)

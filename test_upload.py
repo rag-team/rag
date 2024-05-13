@@ -4,7 +4,7 @@ import requests
 from werkzeug.http import parse_options_header
 
 URL = "http://localhost:8000/fill-pdf/"
-FILE = "../1623_102_lab_rotation_formular_20170512.pdf"
+FILE = "1623_102_lab_rotation_formular_20170512.pdf"
 
 with open(FILE, "rb") as f:
     file_content = f.read()
@@ -24,3 +24,5 @@ if response.status_code == 200:
         print(response.text)
 else:
     print(response.reason)
+    if content := response.content:
+        print(content.decode())
