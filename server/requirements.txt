@@ -2,4 +2,7 @@ llama_cpp_python
 pgvector
 streamlit
 pypdfium2
+pypdf
 fastapi
+langchain
+langchain-community
