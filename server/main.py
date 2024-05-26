@@ -66,12 +66,12 @@ with open(os.path.join(os.path.dirname(__file__), "context.json"), "r") as f:
 
 @app.get("/schlagworte/")
 def get_schlagworte(db=Depends(get_db)):
-    return db.query(models.Schlagworte).all()
+    return db.query(models.Schlagwort).all()
 
 
 @app.post("/schlagworte/create/")
 def create_schlagwort(schlagwort: str, db=Depends(get_db)):
-    schlagwort = models.Schlagworte(schlagwort=schlagwort)
+    schlagwort = models.Schlagwort(schlagwort=schlagwort)
     db.add(schlagwort)
     db.commit()
     return schlagwort
@@ -126,8 +126,7 @@ async def fill_pdf(file: UploadFile = File(...), context: dict = {}):
             },
         )
 
-    print(result)
-
+    # Write results to PDF
     writer = PdfWriter()
     writer.append(reader)
     writer.set_need_appearances_writer()
