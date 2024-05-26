@@ -11,3 +11,5 @@ $ docker compose up server
 ```
 
 Please move the networks folder to top-level of the repository.
+
+Note: there is currently a bug where the database credentials are off. After building, go into the database container and set permissions for the mysql user manually. Afterwards restart the server docker again.
