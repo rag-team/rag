@@ -1,0 +1,48 @@
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/server
+      - ../models:/server/models
+      - /usr/local/cuda:/usr/local/cuda # Mount CUDA toolkit to access GPU
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+      - CUDA_VISIBLE_DEVICES=all # Use all available GPUs
+      - PGVECTOR_HOST=vectorDB
+    depends_on:
+      - vectorDB
+      - mysqlDB
+
+  vectorDB:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: vectordb
+    expose:
+      - "5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
+
+  mysqlDB:
+    image: mysql:8.4.0
+    # restart: always
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_USER: mysql
+      MYSQL_PASSWORD: password
+    expose:
+      - "3306"
+
+volumes:
+  postgres_data:
+  mysql_data:

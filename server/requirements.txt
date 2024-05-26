@@ -6,3 +6,9 @@ pypdf
 fastapi
 langchain
 langchain-community
+uvicorn
+mysqlclient
+pymysql
+cryptography
+sentence-transformers
+psycopg2-binary

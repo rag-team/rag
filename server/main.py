@@ -4,8 +4,7 @@ import os
 import time
 from contextlib import asynccontextmanager
 
-from db import VectorStore
-from fastapi import FastAPI, File, HTTPException, Response, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Response, UploadFile
 from langchain.chains.conversational_retrieval.base import ConversationalRetrievalChain
 from langchain.memory.buffer import ConversationBufferMemory
 from langchain_community.llms.llamacpp import LlamaCpp
@@ -14,7 +13,14 @@ from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from pypdf import PdfReader, PdfWriter
 
-MODEL_PATH = "models/tinyllama-1.1b-chat-v0.3.Q4_K_M.gguf"
+from server.schlagwortdb import models
+from server.schlagwortdb.database import SessionLocal, engine
+from server.vectordb import VectorStore
+
+MODEL_PATH = os.path.join(
+    os.path.dirname(__file__),
+    "models/tinyllama-1.1b-chat-v0.3.Q4_K_M.gguf"
+)
 
 
 @asynccontextmanager
@@ -39,13 +45,41 @@ async def lifespan(app: FastAPI):
     yield
 
 
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+models.Base.metadata.drop_all(bind=engine)
+models.Base.metadata.create_all(bind=engine)
 app = FastAPI(lifespan=lifespan)
 
-with open("PROMPT.txt", "r") as f:
+with open(os.path.join(os.path.dirname(__file__), "PROMPT.txt"), "r") as f:
     PROMPT = f.read()
 
-with open("context.json", "r") as f:
+with open(os.path.join(os.path.dirname(__file__), "context.json"), "r") as f:
     context = json.loads(f.read())
+
+
+@app.get("/schlagworte/")
+def get_schlagworte(db=Depends(get_db)):
+    return db.query(models.Schlagworte).all()
+
+
+@app.post("/schlagworte/create/")
+def create_schlagwort(schlagwort: str, db=Depends(get_db)):
+    schlagwort = models.Schlagworte(schlagwort=schlagwort)
+    db.add(schlagwort)
+    db.commit()
+    return schlagwort
+
+
+@app.get("/hw")
+def hello_world():
+    return {"hello": "world"}
 
 
 @app.post("/upload-file/")

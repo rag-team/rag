@@ -1,8 +1,10 @@
 import os
+
+import pypdfium2 as pdfium
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores.pgvector import PGVector
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-import pypdfium2 as pdfium
+
 
 class VectorStore():
     COLLECTION_NAME = "test_collection"
@@ -10,7 +12,7 @@ class VectorStore():
         driver=os.environ.get("PGVECTOR_DRIVER", "psycopg2"),
         host=os.environ.get("PGVECTOR_HOST", "localhost"),
         port=int(os.environ.get("PGVECTOR_PORT", "5432")),
-        database=os.environ.get("PGVECTOR_DATABASE", "rag"),
+        database=os.environ.get("PGVECTOR_DATABASE", "vectordb"),
         user=os.environ.get("PGVECTOR_USER", "postgres"),
         password=os.environ.get("PGVECTOR_PASSWORD", "password"),
     )
