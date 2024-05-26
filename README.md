@@ -21,3 +21,18 @@ $ mysql -p
 $ GRANT ALL PRIVILEGES ON *.* TO 'mysql':'%';
 $ FLUSH PRIVILEGES;
 ```
+
+### Testing document processing
+To test document processing locally, create the `_Dokumentendump_` folder at top-level, and put some PDF file into it. Then call
+```
+python -m server.process_document *YOUR_DOCUMENT*
+```
+using the environment variables 
+```
+MYSQL_HOST=localhost
+MYSQL_USER=mysql
+MYSQL_PASSWORD=password
+```
+You can also use 
+```MYSQL_HOST=localhost MYSQL_USER=mysql MYSQL_PASSWORD=password python -m server.process_document *YOUR_DOCUMENT*```
+directly.
