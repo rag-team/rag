@@ -12,27 +12,9 @@ $ docker compose up server
 
 Please move the networks folder to top-level of the repository.
 
-Note: there is currently a bug where the database credentials are off. After building, go into the database container and set permissions for the mysql user manually. Afterwards restart the server docker again.
-```
-$ docker ps | grep mysql
-$ docker exec -it CONTAINER_ID /bin/bash
-$ mysql -p
-  Password: (refer to docker file)
-$ GRANT ALL PRIVILEGES ON *.* TO 'mysql':'%';
-$ FLUSH PRIVILEGES;
-```
 
 ### Testing document processing
 To test document processing locally, create the `_Dokumentendump_` folder at top-level, and put some PDF file into it. Then call
 ```
 python -m server.process_document *YOUR_DOCUMENT*
 ```
-using the environment variables 
-```
-MYSQL_HOST=localhost
-MYSQL_USER=mysql
-MYSQL_PASSWORD=password
-```
-You can also use 
-```MYSQL_HOST=localhost MYSQL_USER=mysql MYSQL_PASSWORD=password python -m server.process_document *YOUR_DOCUMENT*```
-directly.

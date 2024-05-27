@@ -23,7 +23,7 @@ logger = splitOutErrLogger(
     "Logs/WSpeicher_Archiv.log",
     "Logs/WSpeicher_Error.log",
     name=__name__,
-    level=logging.WARNING,
+    level=logging.INFO,
 )
 loopback_logger = fileLogger("Logs/loopback.log", name="loopback", format="%(message)s")
 
