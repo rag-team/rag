@@ -3,15 +3,19 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-MYSQL_USER = os.environ.get("MYSQL_USER", "mysql")
-MYSQL_PASSWORD = os.environ.get("MYSQL_PASSWORD", "password")
-MYSQL_HOST = os.environ.get("MYSQL_HOST", "mysqlDB")
-MYSQL_PORT = os.environ.get("MYSQL_PORT", "3306")
-MYSQL_DB_NAME = os.environ.get("MYSQL_DB_NAME", "schlagwortdb")
+default_db = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "database", "schlagwortdb.sqlite"
+)
 
-SQLALCHEMY_DATABASE_URL = f"mysql+pymysql://{MYSQL_USER}:{MYSQL_PASSWORD}@{MYSQL_HOST}:{MYSQL_PORT}/{MYSQL_DB_NAME}"
+SQLITE_DB = os.environ.get("SQLITE_DB", default_db)
+SQLALCHEMY_DATABASE_URL = f"sqlite:///{SQLITE_DB}"
 
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
+
+# Create database if it doesn't exist
+with engine.connect() as conn:
+    pass
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()

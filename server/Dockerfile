@@ -18,10 +18,7 @@ RUN apt-get update \
     gcc \
     git \
     g++ \
-    # For mysqlclient
-    python3-dev \
-    libmysqlclient-dev \
-    pkg-config \
+    sqlite \
     && rm -rf /var/lib/apt/lists/*
 
 # Set the working directory in the container

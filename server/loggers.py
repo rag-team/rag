@@ -12,6 +12,11 @@ def splitOutErrLogger(
     # Create formatter
     formatter = logging.Formatter(format)
 
+    # Stream handler
+    stream_handler = logging.StreamHandler()
+    stream_handler.setLevel(level)
+    stream_handler.setFormatter(formatter)
+
     # File handler for output log
     file_handler_out = logging.FileHandler(out)
     file_handler_out.setLevel(logging.DEBUG)
@@ -23,6 +28,7 @@ def splitOutErrLogger(
     file_handler_err.setFormatter(formatter)
 
     # Add handlers to the logger
+    log.addHandler(stream_handler)
     log.addHandler(file_handler_out)
     log.addHandler(file_handler_err)
 
