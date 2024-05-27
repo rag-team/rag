@@ -10,7 +10,7 @@ from server.schlagwortdb.database import Base
 class Schlagwort(Base):
     __tablename__ = "Schlagworte"
 
-    pkey: Mapped[int] = mapped_column(primary_key=True)
+    pkey: Mapped[int] = mapped_column(primary_key=True, unique=True, autoincrement=True)
     schlagwort: Mapped[str] = mapped_column(type_=Text(), server_default="empty")
     geschaeftsfeld: Mapped[str] = mapped_column(type_=Text(), server_default="empty")
     kategorie: Mapped[str] = mapped_column(type_=Text(), server_default="empty")
@@ -28,7 +28,7 @@ class Schlagwort(Base):
 class Synonym(Base):
     __tablename__ = "Synonyme"
 
-    pkey: Mapped[int] = mapped_column(primary_key=True)
+    pkey: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     schlagwort: Mapped[int] = mapped_column(
         ForeignKey("Schlagworte.pkey"), server_default="empty"
     )
@@ -43,7 +43,7 @@ class Synonym(Base):
 class Feld(Base):
     __tablename__ = "Felder"
 
-    pkey: Mapped[int] = mapped_column(primary_key=True)
+    pkey: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     feldname: Mapped[str] = mapped_column(
         type_=Text(), server_default="empty", unique=True
     )
