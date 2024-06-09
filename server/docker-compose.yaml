@@ -6,6 +6,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
+      - /mnt/c/Users/jarek/Desktop/rag/server_data:/server_data:rw
       - .:/server
       - ../models:/server/models
       - ./database:/server/database

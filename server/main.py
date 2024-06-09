@@ -3,13 +3,15 @@ import json
 import os
 import time
 from contextlib import asynccontextmanager
+from typing import Optional
 
-from fastapi import Depends, FastAPI, File, HTTPException, Response, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Query, Response, UploadFile
+from fastapi.responses import FileResponse
 from langchain.chains.conversational_retrieval.base import ConversationalRetrievalChain
 from langchain.memory.buffer import ConversationBufferMemory
 from langchain_community.llms.llamacpp import LlamaCpp
 from langchain_core.exceptions import OutputParserException
-from langchain_core.output_parsers import JsonOutputParser
+from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from pypdf import PdfReader, PdfWriter
 
@@ -18,8 +20,7 @@ from server.schlagwortdb.database import SessionLocal, engine
 from server.vectordb import VectorStore
 
 MODEL_PATH = os.path.join(
-    os.path.dirname(__file__),
-    "models/tinyllama-1.1b-chat-v0.3.Q4_K_M.gguf"
+    os.path.dirname(__file__), "models/tinyllama-1.1b-chat-v1.0.Q5_K_M.gguf"
 )
 
 
@@ -53,7 +54,7 @@ def get_db():
         db.close()
 
 
-models.Base.metadata.drop_all(bind=engine)
+# models.Base.metadata.drop_all(bind=engine)
 models.Base.metadata.create_all(bind=engine)
 app = FastAPI(lifespan=lifespan)
 
@@ -62,6 +63,10 @@ with open(os.path.join(os.path.dirname(__file__), "PROMPT.txt"), "r") as f:
 
 with open(os.path.join(os.path.dirname(__file__), "context.json"), "r") as f:
     context = json.loads(f.read())
+
+for dir in ["_Dokumentendump_", "Archiv", "Conf", "Logs"]:
+    dir = os.path.join("/", "server_data", dir)
+    os.makedirs(dir, exist_ok=True)
 
 
 @app.get("/schlagworte/")
@@ -89,9 +94,9 @@ async def upload_file(file: UploadFile = File(...)):
         os.makedirs("uploads", exist_ok=True)
 
         # Save the uploaded file to the "uploads" directory with the original name
-        with open(os.path.join("uploads", file.filename), "wb") as buffer:
+        with open(os.path.join("/", "server_data", "uploads", file.filename), "wb") as buffer:
             buffer.write(await file.read())
-        app.state.vectorstore.injest_files(files=["uploads/" + file.filename])
+        app.state.vectorstore.injest_files(files=["/", "server_data/uploads/" + file.filename])
 
         return Response(
             content=f"File {file.filename} uploaded successfully", status_code=200
@@ -141,6 +146,83 @@ async def fill_pdf(file: UploadFile = File(...), context: dict = {}):
     filled_filename = file.filename.replace(".pdf", "_filled.pdf")
     headers = {"Content-Disposition": f"attachment; filename={filled_filename}"}
     return Response(filled_pdf, media_type="application/pdf", headers=headers)
+
+
+def get_field_mapping(keywords: dict, fields: dict):
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", """
+             You are a helpful assistant who matches inputs to keywords. A user will
+             give you a list of inputs, and you have to respond which keywords the
+             inputs belong to. If an input doesn't belong to any keyword, respond with
+             `None`. Important: always respond in JSON format.
+             Here is a list of keywords: {keywords}
+             """),
+             ("user", f"{fields}"),
+        ]
+    )
+    output = StrOutputParser()  # JsonOutputParser()
+    chain = prompt | app.state.llm | output
+
+    data = {"keywords": ", ".join(keywords), "words": ",".join(fields)}
+    result = chain.invoke(data)
+    return result
+
+
+@app.get("/get-document/")
+async def get_document(
+    doc_id: int, kunde_id: Optional[int] = Query(None), db=Depends(get_db)
+):
+    doc = db.query(models.DokumentLookup).get(doc_id)
+    if not doc:
+        raise HTTPException(404, {"error": "Document not found"})
+
+    doc_file = os.path.join("/", "server_data", "Archiv", doc.docName)
+
+    if not kunde_id:
+        return FileResponse(doc_file, filename=doc.docOrigName)
+    else:
+        kunde = db.query(models.Kunde).get(kunde_id)
+        if not kunde:
+            raise HTTPException(404, {"error": "Kunde not found"})
+
+        stammdaten = {
+            "Anrede": kunde.anrede,
+            "Vorname": kunde.vorname,
+            "Name": kunde.name,
+            "Geburtsdatum": kunde.geburtsdatum,
+            "Geburtsort": kunde.geburtsort,
+            "Staatsangehoerigkeit": kunde.staatsangehoerigkeit,
+            "Vorwahl": kunde.vorwahl,
+            "Telefonnummer": kunde.telefonnummer,
+            "Email": kunde.email,
+            "Familienstand": kunde.familienstand,
+
+            "Strasse": kunde.adresse_obj.strasse,
+            "Hausnummer": kunde.adresse_obj.hausnummer,
+            "HausnummerZusatz": kunde.adresse_obj.hausnummerZusatz,
+            "PLZ": kunde.adresse_obj.plz,
+            "Ort": kunde.adresse_obj.ort,
+        }
+
+        reader = PdfReader(doc_file)
+        field_mapping = get_field_mapping(stammdaten.keys(), reader.get_fields().keys())
+        # field_mapping = {
+        #     "Name": "Name",
+        #     "Strasse_Hausnummer": "Strasse",
+        #     "PLZ_Ort": "PLZ",
+        #     "Telefonnummer": "Telefonnummer",
+        #     "IBAN": None,
+        #     "Vertragsname": None,
+        #     "Zahlungsart": None,
+        #     "BIC": None,
+        #     "Ort": "Ort",
+        #     "Referenznummer_Vertrag": None,
+        #     "Adressfeld": None,
+        #     "Datum_S1": None,
+        #     "Datum_S2": None,
+        # }
+        return field_mapping
 
 
 @app.get("/chat/")
