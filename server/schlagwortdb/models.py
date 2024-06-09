@@ -64,14 +64,23 @@ class DokumentLookup(Base):
     __table_args__ = {"sqlite_autoincrement": True}
 
     pkey: Mapped[int] = mapped_column(primary_key=True)
-    schlagwort: Mapped[int] = mapped_column(ForeignKey("Schlagworte.pkey"))
     docName: Mapped[str] = mapped_column(type_=Text(), server_default="empty")
     docOrigName: Mapped[str] = mapped_column(type_=Text(), server_default="empty")
 
-    schlagwort_obj = relationship("Schlagwort")
-
     def __repr__(self):
         return f"<Dokument {self.docName} for {self.schlagwort_obj.schlagwort}>"
+
+
+class SchlagwortDokument(Base):
+    __tablename__ = "Schlagwort_Dokument"
+    __table_args__ = {"sqlite_autoincrement": True}
+
+    pkey: Mapped[int] = mapped_column(primary_key=True)
+    schlagwort: Mapped[int] = mapped_column(ForeignKey("Schlagworte.pkey"))
+    dokument: Mapped[int] = mapped_column(ForeignKey("Lookup_Dokumente.pkey"))
+
+    schlagwort_obj = relationship("Schlagwort")
+    dokument_obj = relationship("DokumentLookup")
 
 
 class Adresse(Base):

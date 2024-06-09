@@ -23,7 +23,7 @@ logger = splitOutErrLogger(
     "Logs/WSpeicher_Archiv.log",
     "Logs/WSpeicher_Error.log",
     name=__name__,
-    level=logging.INFO,
+    level=logging.DEBUG,
 )
 loopback_logger = fileLogger("Logs/loopback.log", name="loopback", format="%(message)s")
 
@@ -72,7 +72,7 @@ def process_document(filename, session, vectorstore):
 
     # Decide how to process the document based on if it has form fields
     fields = reader.get_fields()
-    logging.debug(f"Found {len(fields)} fields in {filename}")
+    logger.debug(f"Found {len(fields)} fields in {filename}")
 
     if fields:
         return process_form(filename, timestamp, session)
@@ -81,15 +81,20 @@ def process_document(filename, session, vectorstore):
 
 
 def process_form(filename, timestamp, session):
-    logging.info("Processing document with form fields {filename}")
+    logger.info(f"Processing document with form fields {filename}")
 
-    reader = PdfReader(filename)
+    reader = PdfReader(os.path.join("_Dokumentendump_", filename))
     fields = reader.get_fields()
+
+    file_id = reader.metadata["/FileID"]
+    doc = models.DokumentLookup(docName=file_id, docOrigName=filename)
+    session.add(doc)
+    logger.debug(f"Added document '{file_id}' to DokumentLookup table (not commited)")
 
     # Go through all fields and process them individually
     error = False
     for name, field in fields.items():
-        logging.debug(f"Processing field {name} of type {field.field_type}")
+        logger.debug(f"Processing field '{name}' of type {field.field_type}")
 
         # Check if Schlagwort exists in database
         schlagwort = session.execute(
@@ -98,12 +103,14 @@ def process_form(filename, timestamp, session):
 
         # If not, check if synonym exists in database
         if not schlagwort:
-            logger.debug(f"Schlagwort {name} not found in database. Checking synonyms")
+            logger.debug(
+                f"Schlagwort '{name}' not found in database. Checking synonyms"
+            )
             synonym = session.execute(
                 select(models.Synonym).where(models.Synonym.synonym == name)
             ).scalar()
             if not synonym:
-                logger.error(f"No synonym for Schlagwort {name} found in database.")
+                logger.error(f"No synonym for Schlagwort '{name}' found in database.")
                 loopback_logger.info(
                     "%s\t%s\t%s\t%s", timestamp, filename, 1, "Schlagwort not found"
                 )
@@ -113,21 +120,36 @@ def process_form(filename, timestamp, session):
             schlagwort = synonym.schlagwort_obj.schlagwort
 
         # Add field to database
-        logging.info(f"Found Schlagwort {schlagwort} in database")
+        logger.info(f"Found Schlagwort '{schlagwort}' in database")
         feld = models.Feld(
             schlagword=schlagwort.pkey, feldname=name, feldtyp=field.field_type
         )
         session.add(feld)
-        session.commit()
-        logging.debug(f"Added field {name} to Felder table")
+        logger.debug(f"Added field '{name}' to Felder table (not commited)")
+
+        # Add field to schlagwort_dokument
+        session.add(
+            models.SchlagwortDokument(schlagwort=schlagwort.pkey, dokument=doc.pkey)
+        )
+        logger.debug(f"Added field '{name}' to SchlagwortDokument table (not commited)")
+
+    if not error:
+        logger.debug(f"No errors occurred. Moving and committing session...")
 
         # Move document to Archiv
         os.rename(
-            os.path.join("_Dokumentendump_", filename), os.path.join("Archiv", filename)
+            os.path.join("_Dokumentendump_", filename), os.path.join("Archiv", file_id)
         )
-        logging.info("Moved {filename} to Archiv")
+        logger.info(f"Moved {filename} to Archiv/{file_id}")
 
-    return "ERROR" if error else "SUCCESS"
+        session.commit()
+        logger.debug(f"Commited session")
+        return "SUCCESS"
+
+    logger.error(f"Errors occurred. Rolling back session...")
+    session.rollback()
+    logger.debug(f"Rolled back session")
+    return "ERROR"
 
 
 def process_noform(*args):

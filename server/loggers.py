@@ -1,4 +1,5 @@
 import logging
+import sys
 
 
 def splitOutErrLogger(
@@ -13,13 +14,14 @@ def splitOutErrLogger(
     formatter = logging.Formatter(format)
 
     # Stream handler
-    stream_handler = logging.StreamHandler()
+    stream_handler = logging.StreamHandler(sys.stdout)
     stream_handler.setLevel(level)
     stream_handler.setFormatter(formatter)
 
     # File handler for output log
     file_handler_out = logging.FileHandler(out)
     file_handler_out.setLevel(logging.DEBUG)
+    file_handler_out.addFilter(lambda record: record.levelno < logging.ERROR)
     file_handler_out.setFormatter(formatter)
 
     # File handler for error log
@@ -46,7 +48,7 @@ def fileLogger(filename, name=None, format=logging.BASIC_FORMAT, level=logging.D
 
     # File handler
     file_handler = logging.FileHandler(filename)
-    file_handler.setLevel(level)
+    file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(formatter)
 
     # Add handlers to the logger
