@@ -15,17 +15,20 @@ from server.vectordb import VectorStore
 
 TIME_FORMAT = "%Y-%m-%d-%H-%M-%S"
 
+# Get the directory of the current script
+script_dir = os.path.dirname(os.path.abspath(__file__))
 
+# Create directories relative to the script directory
 for dir in ["_Dokumentendump_", "Archiv", "Conf", "Logs"]:
-    os.makedirs(dir, exist_ok=True)
+    os.makedirs(os.path.join(script_dir, dir), exist_ok=True)
 
 logger = splitOutErrLogger(
-    "Logs/WSpeicher_Archiv.log",
-    "Logs/WSpeicher_Error.log",
+    os.path.join(script_dir, "Logs/WSpeicher_Archiv.log"),
+    os.path.join(script_dir, "Logs/WSpeicher_Error.log"),
     name=__name__,
     level=logging.INFO,
 )
-loopback_logger = fileLogger("Logs/loopback.log", name="loopback", format="%(message)s")
+loopback_logger = fileLogger(os.path.join(script_dir, "Logs/loopback.log"), name="loopback", format="%(message)s")
 
 
 def process_document(filename, session, vectorstore):
@@ -46,7 +49,7 @@ def process_document(filename, session, vectorstore):
     logger.debug(f"User: {user}")
 
     # Add metadata to the document
-    reader = PdfReader(os.path.join("_Dokumentendump_", filename))
+    reader = PdfReader(os.path.join(script_dir, "_Dokumentendump_", filename))
     writer = PdfWriter()
     writer.append(reader)
     writer.set_need_appearances_writer()
@@ -61,13 +64,13 @@ def process_document(filename, session, vectorstore):
     )
 
     logger.debug(f"Writing document with added metadata to {filename}")
-    with open(os.path.join("_Dokumentendump_", filename), "wb") as f:
+    with open(os.path.join(script_dir, "_Dokumentendump_", filename), "wb") as f:
         writer.write(f)
     logger.info(f"Added metadata for {filename} to {filename}")
 
     # Add to vector store
     logger.debug(f"Ingesting {filename} into vector store")
-    vectorstore.injest_files(files=[os.path.join("_Dokumentendump_", filename)])
+    vectorstore.injest_files(files=[os.path.join(script_dir, "_Dokumentendump_", filename)])
     logger.info(f"Ingested {filename} into vector store")
 
     # Decide how to process the document based on if it has form fields
@@ -83,7 +86,7 @@ def process_document(filename, session, vectorstore):
 def process_form(filename, timestamp, session):
     logging.info("Processing document with form fields {filename}")
 
-    reader = PdfReader(filename)
+    reader = PdfReader(os.path.join(script_dir, "_Dokumentendump_", filename))
     fields = reader.get_fields()
 
     # Go through all fields and process them individually
@@ -123,7 +126,7 @@ def process_form(filename, timestamp, session):
 
         # Move document to Archiv
         os.rename(
-            os.path.join("_Dokumentendump_", filename), os.path.join("Archiv", filename)
+            os.path.join(script_dir, "_Dokumentendump_", filename), os.path.join(script_dir, "Archiv", filename)
         )
         logging.info("Moved {filename} to Archiv")
 

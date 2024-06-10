@@ -1,5 +1,6 @@
 import os
 
+import torch
 import pypdfium2 as pdfium
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores.pgvector import PGVector
@@ -17,14 +18,14 @@ class VectorStore():
         password=os.environ.get("PGVECTOR_PASSWORD", "password"),
     )
 
-    model_name = "BAAI/bge-small-en-v1.5"
+    model_name = "danielheinz/e5-base-sts-en-de"#"BAAI/bge-small-en-v1.5"
     model_kwargs = {'device': 'cuda'}
     encode_kwargs = {'normalize_embeddings': False}
 
     def __init__(self):
         # chek if on mac or windows
         if os.name == 'posix':
-            self.model_kwargs = {'device': 'cpu'}
+            self.model_kwargs = {'device': 'cpu' if not torch.cuda.is_available() else "gpu"}
 
         self.embedding_model = HuggingFaceEmbeddings(
             model_name=self.model_name,

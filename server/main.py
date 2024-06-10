@@ -19,19 +19,22 @@ from server.vectordb import VectorStore
 
 MODEL_PATH = os.path.join(
     os.path.dirname(__file__),
-    "models/tinyllama-1.1b-chat-v0.3.Q4_K_M.gguf"
+    #"models/tinyllama-1.1b-chat-v0.3.Q4_K_M.gguf"
+    #"models/llama-2-7b-chat.Q5_K_M.gguf"
+    "models/leo-mistral-hessianai-7b-chat.Q5_K_M.gguf"
 )
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("Loading LlamaCpp model...")
+    print(f"Loading {MODEL_PATH} LlamaCpp model...")
     start = time.time()
     app.state.llm = LlamaCpp(
         model_path=MODEL_PATH,
         temperature=0.5,
         verbose=False,
         n_ctx=2048,
+        n_gpu_layers=-1,
     )
     end = time.time()
     print(f"LlamaCpp model loaded in {end - start} seconds")
@@ -149,9 +152,21 @@ async def chat(query: str):
         llm=app.state.llm,
         retriever=app.state.vectorstore.get_store().as_retriever(search_k=5),
         memory=ConversationBufferMemory(
-            memory_key="chat_history", return_messages=True
+            memory_key="chat_history",
+            return_messages=True,
+            output_key="answer"  # Specify the key to store in memory
         ),
-        # return_source_documents=True,
+        return_source_documents=True,
     )
     response = chain(query)
+
+    # Extract the source documents
+    source_documents = response.get("source_documents", [])
+
+    # Print out the source documents
+    for doc in source_documents:
+        print("Documents", doc)
+
+    # Return both answer and source documents
     return response["answer"]
+

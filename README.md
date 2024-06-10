@@ -17,4 +17,5 @@ Please move the networks folder to top-level of the repository.
 To test document processing locally, create the `_Dokumentendump_` folder at top-level, and put some PDF file into it. Then call
 ```
 python -m server.process_document *YOUR_DOCUMENT*
+python3 -m server.process_document ING_Herauslagekriterien.pdf
 ```
