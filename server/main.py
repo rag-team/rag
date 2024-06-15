@@ -181,48 +181,63 @@ async def get_document(
 
     if not kunde_id:
         return FileResponse(doc_file, filename=doc.docOrigName)
-    else:
-        kunde = db.query(models.Kunde).get(kunde_id)
-        if not kunde:
-            raise HTTPException(404, {"error": "Kunde not found"})
+    
 
-        stammdaten = {
-            "Anrede": kunde.anrede,
-            "Vorname": kunde.vorname,
-            "Name": kunde.name,
-            "Geburtsdatum": kunde.geburtsdatum,
-            "Geburtsort": kunde.geburtsort,
-            "Staatsangehoerigkeit": kunde.staatsangehoerigkeit,
-            "Vorwahl": kunde.vorwahl,
-            "Telefonnummer": kunde.telefonnummer,
-            "Email": kunde.email,
-            "Familienstand": kunde.familienstand,
+    kunde = db.query(models.Kunde).get(kunde_id)
+    if not kunde:
+        raise HTTPException(404, {"error": "Kunde not found"})
 
-            "Strasse": kunde.adresse_obj.strasse,
-            "Hausnummer": kunde.adresse_obj.hausnummer,
-            "HausnummerZusatz": kunde.adresse_obj.hausnummerZusatz,
-            "PLZ": kunde.adresse_obj.plz,
-            "Ort": kunde.adresse_obj.ort,
-        }
+    stammdaten = {
+        "Anrede": kunde.anrede,
+        "Vorname": kunde.vorname,
+        "Name": kunde.name,
+        "Geburtsdatum": kunde.geburtsdatum,
+        "Geburtsort": kunde.geburtsort,
+        "Staatsangehoerigkeit": kunde.staatsangehoerigkeit,
+        "Vorwahl": kunde.vorwahl,
+        "Telefonnummer": kunde.telefonnummer,
+        "Email": kunde.email,
+        "Familienstand": kunde.familienstand,
 
-        reader = PdfReader(doc_file)
-        field_mapping = get_field_mapping(stammdaten.keys(), reader.get_fields().keys())
-        # field_mapping = {
-        #     "Name": "Name",
-        #     "Strasse_Hausnummer": "Strasse",
-        #     "PLZ_Ort": "PLZ",
-        #     "Telefonnummer": "Telefonnummer",
-        #     "IBAN": None,
-        #     "Vertragsname": None,
-        #     "Zahlungsart": None,
-        #     "BIC": None,
-        #     "Ort": "Ort",
-        #     "Referenznummer_Vertrag": None,
-        #     "Adressfeld": None,
-        #     "Datum_S1": None,
-        #     "Datum_S2": None,
-        # }
-        return field_mapping
+        "Strasse": kunde.adresse_obj.strasse,
+        "Hausnummer": kunde.adresse_obj.hausnummer,
+        "HausnummerZusatz": kunde.adresse_obj.hausnummerZusatz,
+        "PLZ": kunde.adresse_obj.plz,
+        "Ort": kunde.adresse_obj.ort,
+    }
+
+    reader = PdfReader(doc_file)
+    # field_mapping = get_field_mapping(stammdaten.keys(), reader.get_fields().keys())
+    field_mapping = {
+        "Name": "Name",
+        "Strasse_Hausnummer": "Strasse",
+        "PLZ_Ort": "PLZ",
+        "Telefonnummer": "Telefonnummer",
+        "IBAN": None,
+        "Vertragsname": None,
+        "Zahlungsart": None,
+        "BIC": None,
+        "Ort": "Ort",
+        "Referenznummer_Vertrag": None,
+        "Adressfeld": None,
+        "Datum_S1": None,
+        "Datum_S2": None,
+    }
+    field_mapping = {k: v for k, v in field_mapping.items() if v is not None}
+    data = {k: stammdaten[v] for k, v in field_mapping.items()}
+
+    # fill pdf
+    writer = PdfWriter()
+    writer.append(reader)
+    writer.set_need_appearances_writer()
+
+    for page in writer.pages:
+        writer.update_page_form_field_values(page, data, auto_regenerate=False)
+
+    bio = io.BytesIO()
+    writer.write(bio)
+    filled_pdf = bio.getvalue()
+    return Response(filled_pdf, media_type="application/pdf")
 
 
 @app.get("/chat/")
