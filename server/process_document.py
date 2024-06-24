@@ -15,20 +15,13 @@ from server.vectordb import VectorStore
 
 TIME_FORMAT = "%Y-%m-%d-%H-%M-%S"
 
-# Get the directory of the current script
-script_dir = os.path.dirname(os.path.abspath(__file__))
-
-# Create directories relative to the script directory
-for dir in ["_Dokumentendump_", "Archiv", "Conf", "Logs"]:
-    os.makedirs(os.path.join(script_dir, dir), exist_ok=True)
-
 logger = splitOutErrLogger(
-    os.path.join(script_dir, "Logs/WSpeicher_Archiv.log"),
-    os.path.join(script_dir, "Logs/WSpeicher_Error.log"),
+    "/server_data/Logs/WSpeicher_Archiv.log",
+    "/server_data/Logs/WSpeicher_Error.log",
     name=__name__,
     level=logging.INFO,
 )
-loopback_logger = fileLogger(os.path.join(script_dir, "Logs/loopback.log"), name="loopback", format="%(message)s")
+loopback_logger = fileLogger("/server_data/Logs/loopback.log", name="loopback", format="%(message)s")
 
 
 def process_document(filename, session, vectorstore):
@@ -49,7 +42,7 @@ def process_document(filename, session, vectorstore):
     logger.debug(f"User: {user}")
 
     # Add metadata to the document
-    reader = PdfReader(os.path.join(script_dir, "_Dokumentendump_", filename))
+    reader = PdfReader(os.path.join("/", "server_data", "_Dokumentendump_", filename))
     writer = PdfWriter()
     writer.append(reader)
     writer.set_need_appearances_writer()
@@ -64,18 +57,18 @@ def process_document(filename, session, vectorstore):
     )
 
     logger.debug(f"Writing document with added metadata to {filename}")
-    with open(os.path.join(script_dir, "_Dokumentendump_", filename), "wb") as f:
+    with open(os.path.join("/", "server_data", "_Dokumentendump_", filename), "wb") as f:
         writer.write(f)
     logger.info(f"Added metadata for {filename} to {filename}")
 
     # Add to vector store
     logger.debug(f"Ingesting {filename} into vector store")
-    vectorstore.injest_files(files=[os.path.join(script_dir, "_Dokumentendump_", filename)])
+    vectorstore.injest_files(files=[os.path.join("/", "server_data", "_Dokumentendump_", filename)])
     logger.info(f"Ingested {filename} into vector store")
 
     # Decide how to process the document based on if it has form fields
     fields = reader.get_fields()
-    logging.debug(f"Found {len(fields)} fields in {filename}")
+    logger.debug(f"Found {len(fields)} fields in {filename}")
 
     if fields:
         return process_form(filename, timestamp, session)
@@ -84,15 +77,21 @@ def process_document(filename, session, vectorstore):
 
 
 def process_form(filename, timestamp, session):
-    logging.info("Processing document with form fields {filename}")
+    logger.info(f"Processing document with form fields {filename}")
 
-    reader = PdfReader(os.path.join(script_dir, "_Dokumentendump_", filename))
+    reader = PdfReader(os.path.join("/", "server_data", "_Dokumentendump_", filename))
     fields = reader.get_fields()
+
+    file_id = reader.metadata["/FileID"]
+    doc = models.DokumentLookup(docName=file_id, docOrigName=filename)
+    session.add(doc)
+    session.flush()
+    logger.debug(f"Added document '{file_id}' to DokumentLookup table (not commited)")
 
     # Go through all fields and process them individually
     error = False
     for name, field in fields.items():
-        logging.debug(f"Processing field {name} of type {field.field_type}")
+        logger.debug(f"Processing field '{name}' of type {field.field_type}")
 
         # Check if Schlagwort exists in database
         schlagwort = session.execute(
@@ -101,36 +100,69 @@ def process_form(filename, timestamp, session):
 
         # If not, check if synonym exists in database
         if not schlagwort:
-            logger.debug(f"Schlagwort {name} not found in database. Checking synonyms")
-            synonym = session.execute(
-                select(models.Synonym).where(models.Synonym.synonym == name)
-            ).scalar()
-            if not synonym:
-                logger.error(f"No synonym for Schlagwort {name} found in database.")
-                loopback_logger.info(
-                    "%s\t%s\t%s\t%s", timestamp, filename, 1, "Schlagwort not found"
-                )
-                error = True
-                continue
+            # Add schlagwort to DB
+            schlagwort = models.Schlagwort(schlagwort=name)
+            session.add(schlagwort)
+            session.flush()
+            logger.debug(f"Added Schlgwrt '{name}' to Schlagworte table (not commited)")
 
-            schlagwort = synonym.schlagwort_obj.schlagwort
+            # logger.debug(
+            #     f"Schlagwort '{name}' not found in database. Checking synonyms"
+            # )
+            # synonym = session.execute(
+            #     select(models.Synonym).where(models.Synonym.synonym == name)
+            # ).scalar()
+            # if not synonym:
+            #     logger.error(f"No synonym for Schlagwort '{name}' found in database.")
+            #     loopback_logger.info(
+            #         "%s\t%s\t%s\t%s", timestamp, filename, 1, "Schlagwort not found"
+            #     )
+            #     error = True
+            #     continue
+
+            # schlagwort = synonym.schlagwort_obj.schlagwort
 
         # Add field to database
-        logging.info(f"Found Schlagwort {schlagwort} in database")
-        feld = models.Feld(
-            schlagword=schlagwort.pkey, feldname=name, feldtyp=field.field_type
+        logger.info(f"Found Schlagwort '{schlagwort}' in database")
+
+        # TODO: should normally (according to Liss) be added unconditionally
+        # Not sure how that would work out though...
+        feld = session.execute(
+            select(models.Feld)
+            .where(models.Feld.feldname == name)
+        ).scalar()
+        if not feld:
+            feld = models.Feld(
+                schlagwort=schlagwort.pkey, feldname=name, feldtyp=field.field_type
+            )
+            session.add(feld)
+            logger.debug(f"Added field '{name}' to Felder table (not commited)")
+
+        # Add field to schlagwort_dokument
+        session.add(
+            models.SchlagwortDokument(schlagwort=schlagwort.pkey, dokument=doc.pkey)
         )
-        session.add(feld)
+        logger.debug(f"Added field '{name}' to SchlagwortDokument table (not commited)")
+
+    if not error:
+        logger.debug(f"No errors occurred. Committing session and moving to Archiv...")
         session.commit()
-        logging.debug(f"Added field {name} to Felder table")
+        logger.debug(f"Commited session")
 
         # Move document to Archiv
         os.rename(
-            os.path.join(script_dir, "_Dokumentendump_", filename), os.path.join(script_dir, "Archiv", filename)
+            os.path.join("/", "server_data", "_Dokumentendump_", filename), 
+            os.path.join("/", "server_data", "Archiv", file_id)
         )
-        logging.info("Moved {filename} to Archiv")
+        logger.debug(f"Moved {filename} to Archiv/{file_id}")
 
-    return "ERROR" if error else "SUCCESS"
+        logger.info(f"Succesfully processed document {filename}")
+        return "SUCCESS"
+
+    logger.error(f"Errors occurred. Rolling back session...")
+    session.rollback()
+    logger.debug(f"Rolled back session")
+    return "ERROR"
 
 
 def process_noform(*args):

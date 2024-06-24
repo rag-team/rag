@@ -20,5 +20,13 @@ python -m server.process_document *YOUR_DOCUMENT*
 python3 -m server.process_document ING_Herauslagekriterien.pdf
 ```
 
+### Setting local folder for database and logs
+The local folder for database and logs should be set in docker compose:
+```
+volumes:
+      - /local/path:/server_data:rw
+      - ...
+```
 
-pip install llama-cpp-python  --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu121 --upgrade --force-reinstall --no-cache-dir
+### This is something Jan added to the readme
+```pip install llama-cpp-python  --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu121 --upgrade --force-reinstall --no-cache-dir```

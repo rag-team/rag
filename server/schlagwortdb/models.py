@@ -9,8 +9,9 @@ from server.schlagwortdb.database import Base
 
 class Schlagwort(Base):
     __tablename__ = "Schlagworte"
+    __table_args__ = {"sqlite_autoincrement": True}
 
-    pkey: Mapped[int] = mapped_column(primary_key=True, unique=True, autoincrement=True)
+    pkey: Mapped[int] = mapped_column(primary_key=True)
     schlagwort: Mapped[str] = mapped_column(type_=Text(), server_default="empty")
     geschaeftsfeld: Mapped[str] = mapped_column(type_=Text(), server_default="empty")
     kategorie: Mapped[str] = mapped_column(type_=Text(), server_default="empty")
@@ -27,8 +28,9 @@ class Schlagwort(Base):
 
 class Synonym(Base):
     __tablename__ = "Synonyme"
+    __table_args__ = {"sqlite_autoincrement": True}
 
-    pkey: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    pkey: Mapped[int] = mapped_column(primary_key=True)
     schlagwort: Mapped[int] = mapped_column(
         ForeignKey("Schlagworte.pkey"), server_default="empty"
     )
@@ -42,8 +44,9 @@ class Synonym(Base):
 
 class Feld(Base):
     __tablename__ = "Felder"
+    __table_args__ = {"sqlite_autoincrement": True}
 
-    pkey: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    pkey: Mapped[int] = mapped_column(primary_key=True)
     feldname: Mapped[str] = mapped_column(
         type_=Text(), server_default="empty", unique=True
     )
@@ -54,3 +57,59 @@ class Feld(Base):
 
     def __repr__(self):
         return f"<Feld {self.feldname} for {self.schlagwort_obj.schlagwort}>"
+
+
+class DokumentLookup(Base):
+    __tablename__ = "Lookup_Dokumente"
+    __table_args__ = {"sqlite_autoincrement": True}
+
+    pkey: Mapped[int] = mapped_column(primary_key=True)
+    docName: Mapped[str] = mapped_column(type_=Text(), server_default="empty")
+    docOrigName: Mapped[str] = mapped_column(type_=Text(), server_default="empty")
+
+    def __repr__(self):
+        return f"<Dokument {self.docName} for {self.schlagwort_obj.schlagwort}>"
+
+
+class SchlagwortDokument(Base):
+    __tablename__ = "Schlagwort_Dokument"
+    __table_args__ = {"sqlite_autoincrement": True}
+
+    pkey: Mapped[int] = mapped_column(primary_key=True)
+    schlagwort: Mapped[int] = mapped_column(ForeignKey("Schlagworte.pkey"))
+    dokument: Mapped[int] = mapped_column(ForeignKey("Lookup_Dokumente.pkey"))
+
+    schlagwort_obj = relationship("Schlagwort")
+    dokument_obj = relationship("DokumentLookup")
+
+
+class Adresse(Base):
+    __tablename__ = "Adresse"
+    __table_args__ = {"sqlite_autoincrement": True}
+
+    pkey: Mapped[int] = mapped_column(primary_key=True)
+    strasse: Mapped[str] = mapped_column(type_=Text(), server_default="empty")
+    hausnummer: Mapped[int] = mapped_column(server_default="1")
+    hausnummerZusatz: Mapped[str] = mapped_column(type_=Text(), server_default="empty")
+    plz: Mapped[int] = mapped_column(server_default="10000")
+    ort: Mapped[str] = mapped_column(type_=Text(), server_default="empty")
+
+
+class Kunde(Base):
+    __tablename__ = "Kunde"
+    __table_args__ = {"sqlite_autoincrement": True}
+
+    pkey: Mapped[int] = mapped_column(primary_key=True)
+    anrede: Mapped[str] = mapped_column(type_=Text(), server_default="3")
+    vorname: Mapped[str] = mapped_column(type_=Text(), server_default="empty")
+    name: Mapped[str] = mapped_column(type_=Text(), server_default="empty")
+    geburtsdatum: Mapped[str] = mapped_column(type_=Text(), nullable=True)
+    geburtsort: Mapped[str] = mapped_column(type_=Text(), nullable=True)
+    staatsangehoerigkeit: Mapped[str] = mapped_column(type_=Text(), nullable=True)
+    vorwahl: Mapped[int] = mapped_column(nullable=True)
+    telefonnummer: Mapped[int] = mapped_column(nullable=True)
+    email: Mapped[str] = mapped_column(type_=Text(), nullable=True)
+    familienstand: Mapped[int] = mapped_column(nullable=True)
+    adresse: Mapped[int] = mapped_column(ForeignKey("Adresse.pkey"))
+
+    adresse_obj = relationship("Adresse")
