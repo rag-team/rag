@@ -4,6 +4,7 @@ import os
 import time
 from contextlib import asynccontextmanager
 
+import torch
 from fastapi import Depends, FastAPI, File, HTTPException, Response, UploadFile
 from langchain.chains.conversational_retrieval.base import ConversationalRetrievalChain
 from langchain.memory.buffer import ConversationBufferMemory
@@ -20,19 +21,20 @@ from server.vectordb import VectorStore
 MODEL_PATH = os.path.join(
     os.path.dirname(__file__),
     #"models/tinyllama-1.1b-chat-v0.3.Q4_K_M.gguf"
-    #"models/llama-2-7b-chat.Q5_K_M.gguf"
-    "models/leo-mistral-hessianai-7b-chat.Q5_K_M.gguf"
+    "models/llama-2-13b-chat.Q5_K_M.gguf"
+    #"models/leo-mistral-hessianai-7b-chat.Q5_K_M.gguf"
 )
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    print("Is CUDA available? ", torch.cuda.is_available())
     print(f"Loading {MODEL_PATH} LlamaCpp model...")
     start = time.time()
     app.state.llm = LlamaCpp(
         model_path=MODEL_PATH,
         temperature=0.5,
-        verbose=False,
+        verbose=True,
         n_ctx=2048,
         n_gpu_layers=-1,
     )

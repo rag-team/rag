@@ -19,3 +19,6 @@ To test document processing locally, create the `_Dokumentendump_` folder at top
 python -m server.process_document *YOUR_DOCUMENT*
 python3 -m server.process_document ING_Herauslagekriterien.pdf
 ```
+
+
+pip install llama-cpp-python  --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu121 --upgrade --force-reinstall --no-cache-dir

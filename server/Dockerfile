@@ -1,5 +1,5 @@
 # Use the official Python 3.10 image with Ubuntu
-FROM nvidia/cuda:11.6.2-base-ubuntu20.04
+FROM nvidia/cuda:12.5.0-devel-ubuntu20.04
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE 1
@@ -25,15 +25,19 @@ RUN apt-get update \
 WORKDIR /server
 
 # Copy the requirements file separately to leverage Docker cache
-COPY freeze.txt .
 COPY requirements.txt .
+
+USER root
 
 # Install Python dependencies
 RUN pip install --upgrade pip setuptools wheel
 
-ENV CMAKE_ARGS="-DLLAMA_CUBLAS=on -DLLAMA_ALL_WARNINGS=off"
-RUN pip install "llama_cpp_python==0.2.60" --force-reinstall --upgrade --no-cache-dir --verbose
-RUN pip install -r freeze.txt
+ENV PATH="/usr/local/cuda/bin:$PATH"
+ENV LD_LIBRARY_PATH="/usr/local/cuda/lib64:$LD_LIBRARY_PATH"
+ENV FORCE_CMAKE=1
+
+RUN pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+RUN pip install llama_cpp_python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu121 --force-reinstall --upgrade --no-cache-dir --verbose
 RUN pip install -r requirements.txt
 
 # Copy your Django application code
