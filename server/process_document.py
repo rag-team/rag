@@ -42,7 +42,7 @@ def process_document(filename, session, vectorstore):
     logger.debug(f"User: {user}")
 
     # Add metadata to the document
-    reader = PdfReader(os.path.join("/", "server_data", "_Dokumentendump_", filename))
+    reader = PdfReader(os.path.join("_Dokumentendump_", filename))
     writer = PdfWriter()
     writer.append(reader)
     writer.set_need_appearances_writer()
@@ -57,13 +57,13 @@ def process_document(filename, session, vectorstore):
     )
 
     logger.debug(f"Writing document with added metadata to {filename}")
-    with open(os.path.join("/", "server_data", "_Dokumentendump_", filename), "wb") as f:
+    with open(os.path.join("_Dokumentendump_", filename), "wb") as f:
         writer.write(f)
     logger.info(f"Added metadata for {filename} to {filename}")
 
     # Add to vector store
     logger.debug(f"Ingesting {filename} into vector store")
-    vectorstore.injest_files(files=[os.path.join("/", "server_data", "_Dokumentendump_", filename)])
+    vectorstore.injest_files(files=[os.path.join("_Dokumentendump_", filename)])
     logger.info(f"Ingested {filename} into vector store")
 
     # Decide how to process the document based on if it has form fields
@@ -79,7 +79,7 @@ def process_document(filename, session, vectorstore):
 def process_form(filename, timestamp, session):
     logger.info(f"Processing document with form fields {filename}")
 
-    reader = PdfReader(os.path.join("/", "server_data", "_Dokumentendump_", filename))
+    reader = PdfReader(os.path.join("_Dokumentendump_", filename))
     fields = reader.get_fields()
 
     file_id = reader.metadata["/FileID"]

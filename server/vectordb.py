@@ -2,6 +2,7 @@ import os
 
 import torch
 import pypdfium2 as pdfium
+from pypdf import PdfReader
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores.pgvector import PGVector
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -45,6 +46,7 @@ class VectorStore():
 
     def injest_files(self, files):
         pdf_text = self.get_pdf_text(files)
+        print(pdf_text)
         text_chunks = self.get_text_chunks(pdf_text)
         self.store.add_texts(text_chunks)
 
@@ -53,12 +55,33 @@ class VectorStore():
         chunks = text_splitter.split_text(text)
         return chunks
 
+    """
     def get_pdf_text(self, pdf_docs):
         text = ""
         for pdf in pdf_docs:
+            print(pdf)
             pdf_reader = pdfium.PdfDocument(pdf)
+            
             for i in range(len(pdf_reader)):
                 page = pdf_reader.get_page(i)
                 textpage = page.get_textpage()
+                print(textpage.get_text_bounded())
                 text += textpage.get_text_bounded() + "\n"
+        return text
+    """
+
+    def get_pdf_text(self, pdf_docs):
+        text = ""
+        for pdf in pdf_docs:
+
+            # Open the PDF file
+            with open(pdf, "rb") as file:
+                pdf_reader = PdfReader(file)
+
+                # Iterate through each page and extract text
+                for page in pdf_reader.pages:
+                    page_text = page.extract_text()
+                    if page_text:
+                        text += page_text + "\n"
+
         return text

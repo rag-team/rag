@@ -1,5 +1,6 @@
 import io
 import json
+import logging
 import os
 import time
 from contextlib import asynccontextmanager
@@ -16,6 +17,7 @@ from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from pypdf import PdfReader, PdfWriter
 
+from server.loggers import splitOutErrLogger
 from server.schlagwortdb import models
 from server.schlagwortdb.database import SessionLocal, engine
 from server.vectordb import VectorStore
@@ -27,6 +29,13 @@ MODEL_PATH = os.path.join(
     #"models/leo-mistral-hessianai-7b-chat.Q5_K_M.gguf"
 )
 
+logger = splitOutErrLogger(
+    "/server_data/Logs/WSpeicher_Archiv.log",
+    "/server_data/Logs/WSpeicher_Error.log",
+    name=__name__,
+    level=logging.INFO,
+)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -36,7 +45,7 @@ async def lifespan(app: FastAPI):
     app.state.llm = LlamaCpp(
         model_path=MODEL_PATH,
         temperature=0.5,
-        verbose=True,
+        verbose=False,
         n_ctx=2048,
         n_gpu_layers=-1,
     )
@@ -63,6 +72,8 @@ def get_db():
 # models.Base.metadata.drop_all(bind=engine)
 models.Base.metadata.create_all(bind=engine)
 app = FastAPI(lifespan=lifespan)
+app.state.previous_id = None
+app.state.memories = {}
 
 with open(os.path.join(os.path.dirname(__file__), "PROMPT.txt"), "r") as f:
     PROMPT = f.read()
@@ -91,24 +102,6 @@ def create_schlagwort(schlagwort: str, db=Depends(get_db)):
 @app.get("/hw")
 def hello_world():
     return {"hello": "world"}
-
-
-@app.post("/upload-file/")
-async def upload_file(file: UploadFile = File(...)):
-    try:
-        # Ensure the directory for storing files exists, if not create it
-        os.makedirs("uploads", exist_ok=True)
-
-        # Save the uploaded file to the "uploads" directory with the original name
-        with open(os.path.join("/", "server_data", "uploads", file.filename), "wb") as buffer:
-            buffer.write(await file.read())
-        app.state.vectorstore.injest_files(files=["/server_data/uploads/" + file.filename])
-
-        return Response(
-            content=f"File {file.filename} uploaded successfully", status_code=200
-        )
-    except Exception as e:
-        return Response(content=f"Failed to upload file: {e}", status_code=500)
 
 
 @app.post("/fill-pdf/")
@@ -247,15 +240,52 @@ async def get_document(
 
 
 @app.get("/chat/")
-async def chat(query: str):
-    chain = ConversationalRetrievalChain.from_llm(
-        llm=app.state.llm,
-        retriever=app.state.vectorstore.get_store().as_retriever(search_k=5),
-        memory=ConversationBufferMemory(
+async def chat(query: str, id: int, db=Depends(get_db)):
+
+    user = db.query(models.Kunde).get(id)
+    if not user:
+        return {"error": "User not found"}
+
+    logger.debug(f"Found user fields in pkey={user.pkey}, name={user.name}")
+
+    # Check if this is the first request or if the id has changed
+    if app.state.previous_id is None or app.state.previous_id != id:
+        # Extract user information
+        user_info = f"""
+            Nutzerinformation:
+            Name: {user.vorname} {user.name}
+            Anrede: {user.anrede}
+            Geburtsdatum: {user.geburtsdatum}
+            Geburtsort: {user.geburtsort}
+            Staatsangehörigkeit: {user.staatsangehoerigkeit}
+            Vorwahl: {user.vorwahl}
+            Telefonnummer: {user.telefonnummer}
+            Email: {user.email}
+            Familienstand: {user.familienstand}
+            Adresse:
+                Straße: {user.adresse_obj.strasse} {user.adresse_obj.hausnummer}{user.adresse_obj.hausnummerZusatz}
+                PLZ: {user.adresse_obj.plz}
+                Ort: {user.adresse_obj.ort}
+            """
+
+        # Update the previous_id in app.state
+        app.state.previous_id = id
+        query = f"Alle folgenden Antworten sollen auf den Nutzer mit den folgenden Parametern abgestimmt sein {user_info}\n\n Query: {query}"
+
+        # Check if there is an existing memory for this user id
+    if id not in app.state.memories:
+        app.state.memories[id] = ConversationBufferMemory(
             memory_key="chat_history",
             return_messages=True,
             output_key="answer"  # Specify the key to store in memory
-        ),
+        )
+
+    memory = app.state.memories[id]
+
+    chain = ConversationalRetrievalChain.from_llm(
+        llm=app.state.llm,
+        retriever=app.state.vectorstore.get_store().as_retriever(search_k=5),
+        memory=memory,
         return_source_documents=True,
     )
     response = chain(query)
@@ -263,10 +293,16 @@ async def chat(query: str):
     # Extract the source documents
     source_documents = response.get("source_documents", [])
 
+    # Extract document names and similarity scores
+    doc_info = [(doc.metadata["name"], doc.metadata["score"]) for doc in source_documents]
+
     # Print out the source documents
     for doc in source_documents:
         print("Documents", doc)
 
-    # Return both answer and source documents
-    return response["answer"]
+    # Return both answer and source documents info
+    return {
+        "answer": response["answer"],
+        "source_documents_info": doc_info
+    }
 
