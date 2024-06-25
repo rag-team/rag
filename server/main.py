@@ -197,7 +197,6 @@ async def get_document(
         "Telefonnummer": kunde.telefonnummer,
         "Email": kunde.email,
         "Familienstand": kunde.familienstand,
-
         "Strasse": kunde.adresse_obj.strasse,
         "Hausnummer": kunde.adresse_obj.hausnummer,
         "HausnummerZusatz": kunde.adresse_obj.hausnummerZusatz,

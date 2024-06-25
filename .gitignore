@@ -2,4 +2,4 @@
 server/models/
 /llama-cpp-python/
 /data/
-./venv_windows/
+/venv_windows/
