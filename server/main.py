@@ -9,13 +9,21 @@ from typing import Optional
 import torch
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Response, UploadFile
 from fastapi.responses import FileResponse
+from langchain.chains import create_history_aware_retriever, create_retrieval_chain
+from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains.conversational_retrieval.base import ConversationalRetrievalChain
 from langchain.memory.buffer import ConversationBufferMemory
+from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_community.llms.llamacpp import LlamaCpp
+from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.exceptions import OutputParserException
 from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.runnables.history import RunnableWithMessageHistory
 from pypdf import PdfReader, PdfWriter
+from starlette.responses import JSONResponse
 
 from server.loggers import splitOutErrLogger
 from server.schlagwortdb import models
@@ -24,9 +32,9 @@ from server.vectordb import VectorStore
 
 MODEL_PATH = os.path.join(
     os.path.dirname(__file__),
-    #"models/tinyllama-1.1b-chat-v0.3.Q4_K_M.gguf"
-    "models/llama-2-13b-chat.Q5_K_M.gguf"
-    #"models/leo-mistral-hessianai-7b-chat.Q5_K_M.gguf"
+    # "models/tinyllama-1.1b-chat-v0.3.Q4_K_M.gguf"
+    #"models/llama-2-13b-chat.Q5_K_M.gguf"
+     "models/leo-mistral-hessianai-7b-chat.Q5_K_M.gguf"
 )
 
 logger = splitOutErrLogger(
@@ -45,9 +53,10 @@ async def lifespan(app: FastAPI):
     app.state.llm = LlamaCpp(
         model_path=MODEL_PATH,
         temperature=0.5,
-        verbose=False,
+        verbose=True,
         n_ctx=2048,
-        n_gpu_layers=-1,
+        f16_kv=True,  # MUST set to True, otherwise you will run into problem after a couple of calls
+        n_gpu_layers=0,
     )
     end = time.time()
     print(f"LlamaCpp model loaded in {end - start} seconds")
@@ -73,7 +82,8 @@ def get_db():
 models.Base.metadata.create_all(bind=engine)
 app = FastAPI(lifespan=lifespan)
 app.state.previous_id = None
-app.state.memories = {}
+### Statefully manage chat history ###
+app.state.store = {}
 
 with open(os.path.join(os.path.dirname(__file__), "PROMPT.txt"), "r") as f:
     PROMPT = f.read()
@@ -157,7 +167,7 @@ def get_field_mapping(keywords: dict, fields: dict):
              `None`. Important: always respond in JSON format.
              Here is a list of keywords: {keywords}
              """),
-             ("user", f"{fields}"),
+            ("user", f"{fields}"),
         ]
     )
     output = StrOutputParser()  # JsonOutputParser()
@@ -170,7 +180,7 @@ def get_field_mapping(keywords: dict, fields: dict):
 
 @app.get("/get-document/")
 async def get_document(
-    doc_id: int, kunde_id: Optional[int] = Query(None), db=Depends(get_db)
+        doc_id: int, kunde_id: Optional[int] = Query(None), db=Depends(get_db)
 ):
     doc = db.query(models.DokumentLookup).get(doc_id)
     if not doc:
@@ -180,7 +190,6 @@ async def get_document(
 
     if not kunde_id:
         return FileResponse(doc_file, filename=doc.docOrigName)
-    
 
     kunde = db.query(models.Kunde).get(kunde_id)
     if not kunde:
@@ -238,70 +247,107 @@ async def get_document(
     return Response(filled_pdf, media_type="application/pdf")
 
 
+@app.get("/pdf/")
+async def download_pdf(filename: str):
+    # Define the directory where the files are stored
+    directory = "./_Dokumentendump_"
+
+    # Construct the full file path
+    file_path = os.path.join(directory, filename)
+
+    # Check if the file exists
+    if not os.path.isfile(file_path):
+        # If the file does not exist, raise an HTTP 404 Not Found exception
+        raise HTTPException(status_code=404, detail="File not found")
+
+    # Check if the file has a .pdf extension
+    if not file_path.lower().endswith('.pdf'):
+        # If the file is not a PDF, raise an HTTP 400 Bad Request exception
+        raise HTTPException(status_code=400, detail="File is not a PDF")
+
+    # If the file exists and is a PDF, return it as a FileResponse for downloading
+    return FileResponse(file_path, media_type='application/pdf', filename=filename)
+
 @app.get("/chat/")
 async def chat(query: str, id: int, db=Depends(get_db)):
-
-    user = db.query(models.Kunde).get(id)
-    if not user:
-        return {"error": "User not found"}
-
-    logger.debug(f"Found user fields in pkey={user.pkey}, name={user.name}")
-
-    # Check if this is the first request or if the id has changed
-    if app.state.previous_id is None or app.state.previous_id != id:
-        # Extract user information
-        user_info = f"""
-            Nutzerinformation:
-            Name: {user.vorname} {user.name}
-            Anrede: {user.anrede}
-            Geburtsdatum: {user.geburtsdatum}
-            Geburtsort: {user.geburtsort}
-            Staatsangehörigkeit: {user.staatsangehoerigkeit}
-            Vorwahl: {user.vorwahl}
-            Telefonnummer: {user.telefonnummer}
-            Email: {user.email}
-            Familienstand: {user.familienstand}
-            Adresse:
-                Straße: {user.adresse_obj.strasse} {user.adresse_obj.hausnummer}{user.adresse_obj.hausnummerZusatz}
-                PLZ: {user.adresse_obj.plz}
-                Ort: {user.adresse_obj.ort}
-            """
-
-        # Update the previous_id in app.state
-        app.state.previous_id = id
-        query = f"Alle folgenden Antworten sollen auf den Nutzer mit den folgenden Parametern abgestimmt sein {user_info}\n\n Query: {query}"
-
-        # Check if there is an existing memory for this user id
-    if id not in app.state.memories:
-        app.state.memories[id] = ConversationBufferMemory(
-            memory_key="chat_history",
-            return_messages=True,
-            output_key="answer"  # Specify the key to store in memory
-        )
-
-    memory = app.state.memories[id]
-
-    chain = ConversationalRetrievalChain.from_llm(
-        llm=app.state.llm,
-        retriever=app.state.vectorstore.get_store().as_retriever(search_k=5),
-        memory=memory,
-        return_source_documents=True,
+    ### Contextualize question ###
+    contextualize_q_system_prompt = (
+        "Given a chat history and the latest user question "
+        "which might reference context in the chat history, "
+        "formulate a standalone question which can be understood "
+        "without the chat history. Do NOT answer the question, "
+        "just reformulate it if needed and otherwise return it as is."
     )
-    response = chain(query)
 
-    # Extract the source documents
-    source_documents = response.get("source_documents", [])
+    contextualize_q_prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", contextualize_q_system_prompt),
+            MessagesPlaceholder("chat_history"),
+            ("human", "{input}"),
+        ]
+    )
+    history_aware_retriever = create_history_aware_retriever(
+        app.state.llm, app.state.vectorstore.get_store().as_retriever(), contextualize_q_prompt
+    )
 
-    # Extract document names and similarity scores
-    doc_info = [(doc.metadata["name"], doc.metadata["score"]) for doc in source_documents]
+    ### Answer question ###
+    system_prompt = (
+        "You are an assistant for question-answering tasks. "
+        "Use the following pieces of retrieved context to answer "
+        "the question. If you don't know the answer, say that you "
+        "don't know. Use three sentences maximum and keep the "
+        "answer concise."
+        "\n\n"
+        "{context}"
+    )
+    qa_prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", system_prompt),
+            MessagesPlaceholder("chat_history"),
+            ("human", "{input}"),
+        ]
+    )
+    question_answer_chain = create_stuff_documents_chain(app.state.llm, qa_prompt)
 
-    # Print out the source documents
-    for doc in source_documents:
-        print("Documents", doc)
+    rag_chain = create_retrieval_chain(history_aware_retriever, question_answer_chain)
 
-    # Return both answer and source documents info
-    return {
-        "answer": response["answer"],
-        "source_documents_info": doc_info
-    }
+    def get_session_history(session_id: str) -> BaseChatMessageHistory:
+        if session_id not in app.state.store:
+            app.state.store[session_id] = ChatMessageHistory()
+        return app.state.store[session_id]
 
+    conversational_rag_chain = RunnableWithMessageHistory(
+        rag_chain,
+        get_session_history,
+        input_messages_key="input",
+        history_messages_key="chat_history",
+        output_messages_key="answer",
+    )
+
+    response = conversational_rag_chain.invoke(
+        {"input": query},
+        config={
+            "configurable": {"session_id": str(id)}
+        },
+    )
+
+    answer = response["answer"]
+
+    # Extract source document names and calculate relative occurrence
+    source_documents = response.get("context", [])
+    document_counts = {}
+    total_documents = len(source_documents)
+
+    for document in source_documents:
+        doc_name = document.metadata["source"]
+        if doc_name in document_counts:
+            document_counts[doc_name] += 1
+        else:
+            document_counts[doc_name] = 1
+
+    # Calculate relative occurrence
+    documents_with_relative_occurrence = [
+        (doc_name, count / total_documents) for doc_name, count in document_counts.items()
+    ]
+
+    return {"answer": answer, "documents": documents_with_relative_occurrence}
