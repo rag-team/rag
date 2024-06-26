@@ -4,7 +4,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 default_db = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "..", "database", "personendated.sqlite"
+    os.path.dirname(os.path.abspath(__file__)), "..", "database", "personendaten.sqlite"
 )
 
 SQLITE_DB = os.environ.get("SQLITE_DB", default_db)

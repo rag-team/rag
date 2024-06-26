@@ -18,6 +18,8 @@ class Adresse(Base):
     )
     PLZ: Mapped[int] = mapped_column(nullable=False)
     Ort: Mapped[str] = mapped_column(type_=Text(), nullable=False, server_default="")
+    
+    person = relationship("Person", back_populates="adresse_obj")
 
     def to_dict(self):
         return {
@@ -35,7 +37,7 @@ class Ausgabe(Base):
 
     pKey: Mapped[int] = mapped_column(primary_key=True)
     PersonID: Mapped[int] = mapped_column(ForeignKey("Person.pKey"))
-    Betrag: Mapped[Numeric] = mapped_column()
+    Betrag: Mapped[float] = mapped_column(type_=Numeric)
     AusgabeTyp: Mapped[int] = mapped_column()
     AusgabeEntfaellt: Mapped[int] = mapped_column()
 
@@ -56,17 +58,17 @@ class Bausparvertrag(Base):
 
     pKey: Mapped[int] = mapped_column(primary_key=True)
     PersonID: Mapped[int] = mapped_column(ForeignKey("Person.pKey"))
-    angesparterBetrag: Mapped[Numeric] = mapped_column()
+    angesparterBetrag: Mapped[float] = mapped_column(type_=Numeric)
     Bausparkasse: Mapped[str] = mapped_column(type_=Text())
     Vertragsnummer: Mapped[str] = mapped_column(type_=Text())
     Tarif: Mapped[str] = mapped_column(type_=Text())
     Vertragsbeginn: Mapped[str] = mapped_column(type_=Text())
-    Jahresentgelt: Mapped[Numeric] = mapped_column()
-    SparbetragMonatlich: Mapped[Numeric] = mapped_column()
-    Bausparsumme: Mapped[Numeric] = mapped_column()
+    Jahresentgelt: Mapped[float] = mapped_column(type_=Numeric)
+    SparbetragMonatlich: Mapped[float] = mapped_column(type_=Numeric)
+    Bausparsumme: Mapped[float] = mapped_column(type_=Numeric)
     Zuteilungsdatum: Mapped[str] = mapped_column(type_=Text())
     AufloesungAlsVerwendung: Mapped[int] = mapped_column()
-    maximalerBetragVerwendung: Mapped[Numeric] = mapped_column()
+    maximalerBetragVerwendung: Mapped[float] = mapped_column(type_=Numeric)
 
     person = relationship("Person", back_populates="bausparvertraege")
 
@@ -109,10 +111,10 @@ class Einnahme(Base):
 
     pKey: Mapped[int] = mapped_column(primary_key=True)
     PersonID: Mapped[int] = mapped_column(ForeignKey("Person.pKey"))
-    Summe: Mapped[Numeric] = mapped_column()
+    Summe: Mapped[float] = mapped_column(type_=Numeric)
     EinnahmeTyp: Mapped[int] = mapped_column()
     Beginn: Mapped[str] = mapped_column(type_=Text())
-    AnzahlProJahr: Mapped[Numeric] = mapped_column()
+    AnzahlProJahr: Mapped[float] = mapped_column(type_=Numeric)
 
     person = relationship("Person", back_populates="einnahmen")
 
@@ -134,8 +136,8 @@ class Finanzdaten(Base):
 
     pKey: Mapped[int] = mapped_column(primary_key=True)
     PersonID: Mapped[int] = mapped_column(ForeignKey("Person.pKey"))
-    Bruttojahreseinkommen: Mapped[Numeric] = mapped_column()
-    Bruttovorjahreseinkommen: Mapped[Numeric] = mapped_column()
+    Bruttojahreseinkommen: Mapped[float] = mapped_column(type_=Numeric)
+    Bruttovorjahreseinkommen: Mapped[float] = mapped_column(type_=Numeric)
     Rentenbeginn: Mapped[str] = mapped_column(type_=Text())
     IBAN: Mapped[str] = mapped_column(type_=Text())
     BIC: Mapped[str] = mapped_column(type_=Text())
@@ -213,13 +215,14 @@ class Person(Base):
     Arbeitgeber: Mapped[str] = mapped_column(type_=Text(), nullable=True)
     Beschaeftigungsstatus: Mapped[int] = mapped_column(nullable=True)
 
-    adresse_obj = relationship("Adresse", back_populates="personen")
+    adresse_obj = relationship("Adresse", back_populates="person")
     ausgaben = relationship("Ausgabe", back_populates="person")
     bausparvertraege = relationship("Bausparvertrag", back_populates="person")
     einnahmen = relationship("Einnahme", back_populates="person")
     finanzdaten = relationship("Finanzdaten", back_populates="person")
     immobilien = relationship("Immobilie", back_populates="person")
     sparplaene = relationship("Sparplan", back_populates="person")
+    verbindlichkeiten = relationship("Verbindlichkeit", back_populates="person")
 
     def to_dict(self):
         return {
@@ -260,8 +263,8 @@ class Sparplan(Base):
 
     pKey: Mapped[int] = mapped_column(primary_key=True)
     PersonID: Mapped[int] = mapped_column(ForeignKey("Person.pKey"))
-    Wert: Mapped[Numeric] = mapped_column()
-    monatlicheAusgabe: Mapped[Numeric] = mapped_column()
+    Wert: Mapped[float] = mapped_column(type_=Numeric)
+    monatlicheAusgabe: Mapped[float] = mapped_column(type_=Numeric)
 
     person = relationship("Person", back_populates="sparplaene")
 
@@ -284,10 +287,10 @@ class Verbindlichkeit(Base):
 
     pKey: Mapped[int] = mapped_column(primary_key=True)
     PersonID: Mapped[int] = mapped_column(ForeignKey("Person.pKey"))
-    RateMonatlich: Mapped[Numeric] = mapped_column()
+    RateMonatlich: Mapped[float] = mapped_column(type_=Numeric)
     Glaeubiger: Mapped[str] = mapped_column(type_=Text())
     Laufzeitende: Mapped[str] = mapped_column(type_=Text())
-    Restschuld: Mapped[Numeric] = mapped_column()
+    Restschuld: Mapped[float] = mapped_column(type_=Numeric)
     WirdAbgeloest: Mapped[int] = mapped_column()
     Kommentar: Mapped[str] = mapped_column(type_=Text(), nullable=True)
 
