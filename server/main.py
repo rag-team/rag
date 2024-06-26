@@ -14,7 +14,7 @@ from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains.conversational_retrieval.base import ConversationalRetrievalChain
 from langchain.memory.buffer import ConversationBufferMemory
 from langchain_community.chat_message_histories import ChatMessageHistory
-from langchain_community.llms.llamacpp import LlamaCpp
+from langchain_community.llms import LlamaCpp
 from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.exceptions import OutputParserException
 from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
@@ -33,8 +33,9 @@ from server.vectordb import VectorStore
 MODEL_PATH = os.path.join(
     os.path.dirname(__file__),
     # "models/tinyllama-1.1b-chat-v0.3.Q4_K_M.gguf"
-    #"models/llama-2-13b-chat.Q5_K_M.gguf"
-     "models/leo-mistral-hessianai-7b-chat.Q5_K_M.gguf"
+    "models/llama-2-13b.gguf"
+    # "models/leo-mistral-hessianai-7b-chat.Q5_K_M.gguf"
+    #"models/chat-llama-3.gguf"
 )
 
 logger = splitOutErrLogger(
@@ -53,10 +54,9 @@ async def lifespan(app: FastAPI):
     app.state.llm = LlamaCpp(
         model_path=MODEL_PATH,
         temperature=0.5,
-        verbose=True,
+        verbose=False,
         n_ctx=2048,
-        f16_kv=True,  # MUST set to True, otherwise you will run into problem after a couple of calls
-        n_gpu_layers=0,
+        n_gpu_layers=-1,
     )
     end = time.time()
     print(f"LlamaCpp model loaded in {end - start} seconds")
@@ -267,6 +267,7 @@ async def download_pdf(filename: str):
 
     # If the file exists and is a PDF, return it as a FileResponse for downloading
     return FileResponse(file_path, media_type='application/pdf', filename=filename)
+
 
 @app.get("/chat/")
 async def chat(query: str, id: int, db=Depends(get_db)):
