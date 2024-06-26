@@ -11,21 +11,18 @@ from fastapi import Depends, FastAPI, File, HTTPException, Query, Response, Uplo
 from fastapi.responses import FileResponse
 from langchain.chains import create_history_aware_retriever, create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain.chains.conversational_retrieval.base import ConversationalRetrievalChain
-from langchain.memory.buffer import ConversationBufferMemory
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_community.llms import LlamaCpp
 from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.exceptions import OutputParserException
 from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from pypdf import PdfReader, PdfWriter
-from starlette.responses import JSONResponse
 
 from server.loggers import splitOutErrLogger
+from server.personendatendb import models as nutzer_models
+from server.personendatendb.database import SessionLocal as NutzerDBSessionLocal
 from server.schlagwortdb import models
 from server.schlagwortdb.database import SessionLocal, engine
 from server.vectordb import VectorStore
@@ -72,6 +69,14 @@ async def lifespan(app: FastAPI):
 
 def get_db():
     db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+def get_nutzer_db():
+    db = NutzerDBSessionLocal()
     try:
         yield db
     finally:
@@ -160,13 +165,16 @@ async def fill_pdf(file: UploadFile = File(...), context: dict = {}):
 def get_field_mapping(keywords: dict, fields: dict):
     prompt = ChatPromptTemplate.from_messages(
         [
-            ("system", """
+            (
+                "system",
+                """
              You are a helpful assistant who matches inputs to keywords. A user will
              give you a list of inputs, and you have to respond which keywords the
              inputs belong to. If an input doesn't belong to any keyword, respond with
              `None`. Important: always respond in JSON format.
              Here is a list of keywords: {keywords}
-             """),
+             """,
+            ),
             ("user", f"{fields}"),
         ]
     )
@@ -180,7 +188,7 @@ def get_field_mapping(keywords: dict, fields: dict):
 
 @app.get("/get-document/")
 async def get_document(
-        doc_id: int, kunde_id: Optional[int] = Query(None), db=Depends(get_db)
+    doc_id: int, kunde_id: Optional[int] = Query(None), db=Depends(get_db)
 ):
     doc = db.query(models.DokumentLookup).get(doc_id)
     if not doc:
@@ -261,16 +269,24 @@ async def download_pdf(filename: str):
         raise HTTPException(status_code=404, detail="File not found")
 
     # Check if the file has a .pdf extension
-    if not file_path.lower().endswith('.pdf'):
+    if not file_path.lower().endswith(".pdf"):
         # If the file is not a PDF, raise an HTTP 400 Bad Request exception
         raise HTTPException(status_code=400, detail="File is not a PDF")
 
     # If the file exists and is a PDF, return it as a FileResponse for downloading
-    return FileResponse(file_path, media_type='application/pdf', filename=filename)
+    return FileResponse(file_path, media_type="application/pdf", filename=filename)
+
 
 
 @app.get("/chat/")
-async def chat(query: str, id: int, db=Depends(get_db)):
+async def chat(query: str, id: int, nutzer_db=Depends(get_nutzer_db)):
+    user = nutzer_db.query(nutzer_models.Person).get(id)
+
+    if not user:
+        raise HTTPException(404, {"error": "User not found"})
+
+    user_info = user.to_dict()
+
     ### Contextualize question ###
     contextualize_q_system_prompt = (
         "Given a chat history and the latest user question "
@@ -288,17 +304,22 @@ async def chat(query: str, id: int, db=Depends(get_db)):
         ]
     )
     history_aware_retriever = create_history_aware_retriever(
-        app.state.llm, app.state.vectorstore.get_store().as_retriever(), contextualize_q_prompt
+        app.state.llm,
+        app.state.vectorstore.get_store().as_retriever(),
+        contextualize_q_prompt,
     )
 
     ### Answer question ###
     system_prompt = (
         "You are an assistant for question-answering tasks. "
-        "Use the following pieces of retrieved context to answer "
+        "Use the following user information and pieces of retrieved context to answer "
         "the question. If you don't know the answer, say that you "
         "don't know. Use three sentences maximum and keep the "
         "answer concise."
         "\n\n"
+        "User information:\n"
+        "{user_info}\n\n"
+        "Context:\n"
         "{context}"
     )
     qa_prompt = ChatPromptTemplate.from_messages(
@@ -326,10 +347,8 @@ async def chat(query: str, id: int, db=Depends(get_db)):
     )
 
     response = conversational_rag_chain.invoke(
-        {"input": query},
-        config={
-            "configurable": {"session_id": str(id)}
-        },
+        {"input": query, "user_info": user_info},
+        config={"configurable": {"session_id": str(id)}},
     )
 
     answer = response["answer"]
@@ -348,7 +367,8 @@ async def chat(query: str, id: int, db=Depends(get_db)):
 
     # Calculate relative occurrence
     documents_with_relative_occurrence = [
-        (doc_name, count / total_documents) for doc_name, count in document_counts.items()
+        (doc_name, count / total_documents)
+        for doc_name, count in document_counts.items()
     ]
 
     return {"answer": answer, "documents": documents_with_relative_occurrence}
